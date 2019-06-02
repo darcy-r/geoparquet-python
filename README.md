@@ -1,3 +1,5 @@
+# GeoParquet
+
 GeoParquet for Python is a GeoPandas API designed to facilitate fast
 input/output of GIS data in the open source Parquet file format.
 
@@ -12,3 +14,19 @@ __How does it work?__
 The GeoParquet file format is simple adaptation of the existing Parquet file
 format: geometries are stored as well-known binary (WKB), and the coordinate
 reference system is stored as a PROJ string in the file's metadata.
+
+__Basic usage__
+
+```python
+import geopandas as gpd
+import geoparquet as gpq
+
+# read in file from shapefile or other format using geopandas
+gdf = gpd.read_file('example file.shp')
+
+# call .to_parquet() method on geopandas GeoDataFrame to write to file
+gdf.to_parquet('example file.geoparquet')
+
+# read from file by calling gpq.read_geoparquet() function
+gdf = gpq.read_geoparquet('example file.geoparquet')
+```
