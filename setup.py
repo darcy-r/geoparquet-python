@@ -7,7 +7,7 @@ setuptools.setup(
     name="geoparquet",
     version="0.0.1",
     author="D'Arcy Roche",
-    # author_email="d.arcy@posteo.de",
+    author_email="d.arcy@posteo.de",
     description="GeoPandas API for Parquet file format.",
     long_description=long_description,
     long_description_content_type="text/markdown",
