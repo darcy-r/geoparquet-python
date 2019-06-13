@@ -4,6 +4,7 @@ import json
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from pyproj import CRS
 import shapely
 
 
@@ -20,14 +21,9 @@ import shapely
 # ==============================================================================
 
 
-def to_proj_string(crs: dict) -> str:
-    """Express a dictionary of proj string parameters a a single proj string."""
-    params = []
-    for k, v in crs.items():
-        param = ''.join(['+', k, '=', v])
-        params.append(param)
-    proj_string = ' '.join(params)
-    return proj_string
+def to_wkt(crs: dict) -> str:
+    """Transform CRS from dictionary to WKT (WKT2_2018)."""
+    return CRS.from_dict(crs).to_wkt()
 
 
 def serialise_geometry(self: gpd.GeoDataFrame, geom_col_name: str) -> pd.DataFrame:
@@ -86,7 +82,7 @@ def to_geoparquet(self: gpd.GeoDataFrame, path: str):
     geom_col_name = self.geometry.name
     # capture CRS
     try:
-        crs = to_proj_string(self.crs)
+        crs = to_wkt(self.crs)
     except:
         crs = self.crs
     # serialise geometry
