@@ -15,7 +15,8 @@ __How does it work?__
 
 The GeoParquet file format is simple adaptation of the existing Parquet file
 format: geometries are stored as well-known binary (WKB), and the coordinate
-reference system is stored as a PROJ string in the file's metadata.
+reference system is stored as a WKT string (specifically WKT2_2018) in the
+file's metadata.
 
 __Basic usage__
 
