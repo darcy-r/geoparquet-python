@@ -1,0 +1,7 @@
+README.md
+setup.py
+geoparquet/__init__.py
+geoparquet.egg-info/PKG-INFO
+geoparquet.egg-info/SOURCES.txt
+geoparquet.egg-info/dependency_links.txt
+geoparquet.egg-info/top_level.txt
