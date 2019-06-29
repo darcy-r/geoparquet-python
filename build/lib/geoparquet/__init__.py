@@ -4,7 +4,7 @@ import json
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyproj import CRS
+import pyproj
 import shapely
 
 
@@ -23,7 +23,7 @@ import shapely
 
 def to_wkt(crs: dict) -> str:
     """Transform CRS from dictionary to WKT (WKT2_2018)."""
-    return CRS.from_dict(crs).to_wkt()
+    return pyproj.CRS.from_dict(crs).to_wkt(version=u'WKT2_2018')
 
 
 def serialise_geometry(self: gpd.GeoDataFrame, geom_col_name: str) -> pd.DataFrame:
@@ -79,24 +79,33 @@ def to_geoparquet(self: gpd.GeoDataFrame, path: str):
     same way that pandas-specific data is stored in a dict named 'pandas'.
     """
     # capture geometry column name
-    geom_col_name = self.geometry.name
+    field_name = self.geometry.name
     # capture CRS
     try:
         crs = to_wkt(self.crs)
+        crs_format = 'WKT2_2018'
     except:
         crs = self.crs
+        crs_format = 'unknown'
+    # capture geometry types
+    geometry_types = self.geometry.geom_type.unique().tolist()
     # serialise geometry
-    self = self.serialise_geometry(geom_col_name)
+    self = self.serialise_geometry(field_name)
     # convert to pyarrow Table
     self = pa.Table.from_pandas(self)
     # set pyarrow Table metadata with geometry column name and CRS
     self = set_metadata(
         self,
         tbl_meta={
-            'gis' : {
-                'geom_col_name' : geom_col_name,
-                'crs' : crs,
-            }
+            'geometry_fields' : [
+                {
+                    'field_name' : field_name,
+                    'geometry_format' : 'wkb',
+                    'geometry_types' : geometry_types,
+                    'crs' : crs,
+                    'crs_format' : crs_format
+                }
+            ]
         }
     )
     # write to parquet file
@@ -159,9 +168,11 @@ def read_geoparquet(path: str) -> gpd.GeoDataFrame:
     # load into pyarrow Table
     table = pq.read_table(path)
     # capture geometry column name
-    geom_col_name = deserialise_metadata(table)['gis']['geom_col_name']
+    geom_col_name = deserialise_metadata(table)['geometry_fields'][0]['field_name']
     # capture CRS
-    crs = deserialise_metadata(table)['gis']['crs']
+    crs = deserialise_metadata(table)['geometry_fields'][0]['crs']
+    if pyproj.crs.is_wkt(crs):
+        crs = pyproj.CRS.from_wkt(crs).to_dict()
     # convert to pandas DataFrame
     df = table.to_pandas()
     # deserialise geometry column
