@@ -27,8 +27,8 @@ import geoparquet as gpq
 # read in file from shapefile or other format using geopandas
 gdf = gpd.read_file('example file.shp')
 
-# call .to_parquet() method on geopandas GeoDataFrame to write to file
-gdf.to_parquet('example file.geoparquet')
+# call .to_geoparquet() method on geopandas GeoDataFrame to write to file
+gdf.to_geoparquet('example file.geoparquet')
 
 # read from file by calling gpq.read_geoparquet() function
 gdf = gpq.read_geoparquet('example file.geoparquet')
