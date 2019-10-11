@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="geoparquet",
-    version="0.0.2",
+    version="0.0.3",
     author="D'Arcy Roche",
     author_email="d.arcy@posteo.de",
     description="GeoPandas API for Parquet file format.",
