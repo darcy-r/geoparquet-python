@@ -1,6 +1,7 @@
 # load dependencies
 import geopandas as gpd
 import json
+import multiprocessing
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -13,7 +14,7 @@ import shapely
 #
 # function overview:
 # 0. capture geometry column name
-# 1. capture CRS as proj string
+# 1. capture CRS as WKT
 # 2. serialise geometry
 # 3. convert to pyarrow Table
 # 4. set pyarrow Table metadata with geometry column name and CRS
@@ -21,12 +22,7 @@ import shapely
 # ==============================================================================
 
 
-def to_wkt(crs: dict) -> str:
-    """Transform CRS from dictionary to WKT (WKT2_2018)."""
-    return pyproj.CRS.from_dict(crs).to_wkt(version=u'WKT2_2018')
-
-
-def serialise_geometry(self: gpd.GeoDataFrame, geom_col_name: str) -> pd.DataFrame:
+def _serialise_geometry(self: gpd.GeoDataFrame, geom_col_name: str) -> pd.DataFrame:
     """
     Given a geopandas GeoDataFrame, serialise the GeoSeries as well-known binary
     and return the former geopandas GeoDataFrame as a pandas DataFrame.
@@ -34,55 +30,45 @@ def serialise_geometry(self: gpd.GeoDataFrame, geom_col_name: str) -> pd.DataFra
     # prevent side effects
     df = self.copy()
     # serialise shapely geometry as WKB
-    df[geom_col_name] = df[geom_col_name].apply(shapely.wkb.dumps)
+    with multiprocessing.Pool() as P:
+        df[geom_col_name] = P.map(shapely.wkb.dumps, df[geom_col_name])
     return df
 
 
-gpd.GeoDataFrame.serialise_geometry = serialise_geometry
+gpd.GeoDataFrame._serialise_geometry = _serialise_geometry
 
 
-def set_metadata(tbl: pa.Table, tbl_meta={}) -> pa.Table:
+def _update_metadata(table: pa.Table, new_metadata={}) -> pa.Table:
     """
-    Serialise table-level metadata as JSON-encoded byte strings.
-
-    To update the metadata, first new fields are created for all columns.
-    Next a schema is created using the new fields and updated table metadata.
-    Finally a new table is created by replacing the old one's schema, but
-    without copying any data.
+    Serialise user-defined table-level metadata as JSON-encoded byte strings 
+    and append to existing table metadata.
     """
-    # contributed by stackoverflow user 3519145 'thomas'
-
-    # create updated column fields with new metadata
-    if tbl_meta:
-        fields = [col.field for col in tbl.itercolumns()]
-
-        # get updated table metadata
-        tbl_metadata = tbl.schema.metadata
-        for k, v in tbl_meta.items():
+    # with help from stackoverflow users 3519145 'thomas' and 289784 'suvayu'
+    
+    if new_metadata:
+        # set aside original metadata
+        tbl_metadata = table.schema.metadata
+        # update original metadata with new metadata from user
+        for k, v in new_metadata.items():
             tbl_metadata[k] = json.dumps(v).encode('utf-8')
-
-        # create new schema with updated table metadata
-        schema = pa.schema(fields, metadata=tbl_metadata)
-
-        # with updated schema build new table (shouldn't copy data)
-        tbl = pa.Table.from_arrays(list(tbl.itercolumns()), schema=schema)
-
-    return tbl
-
+        # replace metadata in table object
+        table = table.replace_schema_metadata(tbl_metadata)
+    return table
 
 def to_geoparquet(self: gpd.GeoDataFrame, path: str):
     """
     Given a geopandas GeoDataFrame, serialise geometry as WKB, store geometry
     column name and CRS in Apache Arrow metadata, and write to parquet file.
 
-    Note that GIS-specific data is stored in a dict named 'gis', much in the
-    same way that pandas-specific data is stored in a dict named 'pandas'.
+    Metadata about geometry columns is stored in a key named 'geometry_fields' 
+    in the same way that pandas-specific metadata is stored in a key named 
+    'pandas'.
     """
     # capture geometry column name
     field_name = self.geometry.name
     # capture CRS
     try:
-        crs = to_wkt(self.crs)
+        crs = pyproj.CRS.from_dict(self.crs).to_wkt(version='WKT2_2018')
         crs_format = 'WKT2_2018'
     except:
         crs = self.crs
@@ -90,26 +76,25 @@ def to_geoparquet(self: gpd.GeoDataFrame, path: str):
     # capture geometry types
     geometry_types = self.geometry.geom_type.unique().tolist()
     # serialise geometry
-    self = self.serialise_geometry(field_name)
+    self = self._serialise_geometry(field_name)
     # convert to pyarrow Table
     self = pa.Table.from_pandas(self)
     # set pyarrow Table metadata with geometry column name and CRS
-    self = set_metadata(
-        self,
-        tbl_meta={
-            'geometry_fields' : [
-                {
-                    'field_name' : field_name,
-                    'geometry_format' : 'wkb',
-                    'geometry_types' : geometry_types,
-                    'crs' : crs,
-                    'crs_format' : crs_format
-                }
-            ]
-        }
-    )
+    geometry_metadata = {
+        'geometry_fields' : [
+            {
+                'field_name' : field_name,
+                'geometry_format' : 'wkb',
+                'geometry_types' : geometry_types,
+                'crs' : crs,
+                'crs_format' : crs_format
+            }
+        ]
+    }
+    self = _update_metadata(self, new_metadata=geometry_metadata)
     # write to parquet file
     pq.write_table(self, path)
+    return
 
 
 gpd.GeoDataFrame.to_geoparquet = to_geoparquet
@@ -128,54 +113,53 @@ gpd.GeoDataFrame.to_geoparquet = to_geoparquet
 # ==============================================================================
 
 
-def deserialise_metadata(tbl: pa.Table) -> dict:
+def _deserialise_metadata(table: pa.Table) -> dict:
     """
     Deserialise pyarrow table metadata from UTF-8 JSON-encoded strings into dict.
     """
-    metadata = tbl.schema.metadata
-
-    if not metadata:
-        # None or {} are not decoded
-        return metadata
-
-    decoded = {}
+    # with help from stackoverflow user 3519145 'thomas'
+    metadata = table.schema.metadata
+    deserialised_metadata = {}
     for k, v in metadata.items():
         key = k.decode('utf-8')
         val = json.loads(v.decode('utf-8'))
-        decoded[key] = val
-    return decoded
+        deserialised_metadata[key] = val
+    return deserialised_metadata
 
 
-def deserialise_geometry(self: pd.DataFrame, geom_col_name: str) -> pd.DataFrame:
+def _deserialise_geometry(self: pd.DataFrame, geom_col_name: str) -> pd.DataFrame:
     """Given a named column, deserialise WKB strings into shapely geometries."""
     # prevent side effects
     df = self.copy()
     # deserialise WKB to shapely geometry
-    df[geom_col_name] = df[geom_col_name].apply(shapely.wkb.loads)
+    with multiprocessing.Pool() as P:
+        df[geom_col_name] = P.map(shapely.wkb.loads, df[geom_col_name])
     return df
 
 
-pd.DataFrame.deserialise_geometry = deserialise_geometry
+pd.DataFrame._deserialise_geometry = _deserialise_geometry
 
 
 def read_geoparquet(path: str) -> gpd.GeoDataFrame:
     """
     Given the path to a parquet file, construct a geopandas GeoDataFrame by:
-    loading the file as a pyarrow table, reading the geometry column name and
-    CRS from the metadata, deserialising WKB into shapely geometries, and
-    building a geopandas GeoDataFrame.
+    - loading the file as a pyarrow table
+    - reading the geometry column name and CRS from the metadata
+    - deserialising WKB into shapely geometries
     """
-    # load into pyarrow Table
+    # read parquet file into pyarrow Table
     table = pq.read_table(path)
-    # capture geometry column name
-    geom_col_name = deserialise_metadata(table)['geometry_fields'][0]['field_name']
-    # capture CRS
-    crs = deserialise_metadata(table)['geometry_fields'][0]['crs']
-    if pyproj.crs.is_wkt(crs):
-        crs = pyproj.CRS.from_wkt(crs).to_dict()
-    # convert to pandas DataFrame
+    # deserialise metadata for first geometry field 
+    # (geopandas only supports one geometry column)
+    geometry_metadata = _deserialise_metadata(table)['geometry_fields'][0]
+    # extract CRS
+    crs = geometry_metadata['crs']
+    # convert pyarrow Table to pandas DataFrame
     df = table.to_pandas()
+    # identify geometry column name
+    geom_col_name = geometry_metadata['field_name']
     # deserialise geometry column
-    df = df.deserialise_geometry(geom_col_name)
+    df = df._deserialise_geometry(geom_col_name)
     # convert to geopandas GeoDataFrame
-    return gpd.GeoDataFrame(df, crs=crs, geometry=geom_col_name)
+    df = gpd.GeoDataFrame(df, crs=crs, geometry=geom_col_name)
+    return df
