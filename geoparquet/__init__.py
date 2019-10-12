@@ -9,10 +9,10 @@ import pyarrow.parquet as pq
 import pyproj
 import shapely
 
-import geopandas as gpd
+from geopandas import GeoDataFrame
 
 
-def _serialise_geometry(self: gpd.GeoDataFrame,
+def _serialise_geometry(self: GeoDataFrame,
                         geom_col_name: str
                         ) -> pd.DataFrame:
     """
@@ -27,7 +27,7 @@ def _serialise_geometry(self: gpd.GeoDataFrame,
     return df
 
 
-gpd.GeoDataFrame._serialise_geometry = _serialise_geometry
+GeoDataFrame._serialise_geometry = _serialise_geometry
 
 
 def _update_metadata(table: pa.Table, new_metadata={}) -> pa.Table:
@@ -48,7 +48,7 @@ def _update_metadata(table: pa.Table, new_metadata={}) -> pa.Table:
     return table
 
 
-def to_geoparquet(self: gpd.GeoDataFrame, path: str):
+def to_geoparquet(self: GeoDataFrame, path: str):
     """
     Given a geopandas GeoDataFrame, serialise geometry as WKB, store geometry
     column name and CRS in Apache Arrow metadata, and write to parquet file.
@@ -86,7 +86,7 @@ def to_geoparquet(self: gpd.GeoDataFrame, path: str):
     return
 
 
-gpd.GeoDataFrame.to_geoparquet = to_geoparquet
+GeoDataFrame.to_geoparquet = to_geoparquet
 
 
 def _deserialise_metadata(table: pa.Table) -> dict:
@@ -121,7 +121,7 @@ def _deserialise_geometry(self: pd.DataFrame,
 pd.DataFrame._deserialise_geometry = _deserialise_geometry
 
 
-def read_geoparquet(path: str) -> gpd.GeoDataFrame:
+def read_geoparquet(path: str) -> GeoDataFrame:
     """
     Given the path to a parquet file, construct a geopandas GeoDataFrame by:
     - loading the file as a pyarrow table
@@ -142,5 +142,5 @@ def read_geoparquet(path: str) -> gpd.GeoDataFrame:
     # deserialise geometry column
     df = df._deserialise_geometry(geom_col_name)
     # convert to geopandas GeoDataFrame
-    df = gpd.GeoDataFrame(df, crs=crs, geometry=geom_col_name)
+    df = GeoDataFrame(df, crs=crs, geometry=geom_col_name)
     return df
