@@ -1,4 +1,4 @@
-# load dependencies
+
 
 import json
 import multiprocessing
@@ -12,24 +12,11 @@ import shapely
 import geopandas as gpd
 
 
-# ==============================================================================
-# definitions for to_geoparquet()
-#
-# function overview:
-# 0. capture geometry column name
-# 1. capture CRS as WKT
-# 2. serialise geometry
-# 3. convert to pyarrow Table
-# 4. set pyarrow Table metadata with geometry column name and CRS
-# 5. write to parquet file
-# ==============================================================================
-
-
-def _serialise_geometry(self: gpd.GeoDataFrame, 
+def _serialise_geometry(self: gpd.GeoDataFrame,
                         geom_col_name: str
                         ) -> pd.DataFrame:
     """
-    Given a geopandas GeoDataFrame, serialise the GeoSeries as well-known 
+    Given a geopandas GeoDataFrame, serialise the GeoSeries as well-known
     binary and return the former geopandas GeoDataFrame as a pandas DataFrame.
     """
     # prevent side effects
@@ -45,7 +32,7 @@ gpd.GeoDataFrame._serialise_geometry = _serialise_geometry
 
 def _update_metadata(table: pa.Table, new_metadata={}) -> pa.Table:
     """
-    Serialise user-defined table-level metadata as JSON-encoded byte strings 
+    Serialise user-defined table-level metadata as JSON-encoded byte strings
     and append to existing table metadata.
     """
     # with help from stackoverflow users 3519145 'thomas' and 289784 'suvayu'
@@ -66,8 +53,8 @@ def to_geoparquet(self: gpd.GeoDataFrame, path: str):
     Given a geopandas GeoDataFrame, serialise geometry as WKB, store geometry
     column name and CRS in Apache Arrow metadata, and write to parquet file.
 
-    Metadata about geometry columns is stored in a key named 'geometry_fields' 
-    in the same way that pandas-specific metadata is stored in a key named 
+    Metadata about geometry columns is stored in a key named 'geometry_fields'
+    in the same way that pandas-specific metadata is stored in a key named
     'pandas'.
     """
     # capture geometry column name
@@ -102,22 +89,10 @@ def to_geoparquet(self: gpd.GeoDataFrame, path: str):
 gpd.GeoDataFrame.to_geoparquet = to_geoparquet
 
 
-# ==============================================================================
-# definitions for gpq.read_geoparquet()
-#
-# function overview:
-# 0. load into pyarrow Table
-# 1. capture geometry column name
-# 2. capture CRS
-# 3. convert to pandas DataFrame
-# 4. deserialise geometry column
-# 5. convert to geopandas GeoDataFrame
-# ==============================================================================
-
-
 def _deserialise_metadata(table: pa.Table) -> dict:
     """
-    Deserialise pyarrow table metadata from UTF-8 JSON-encoded strings into dict.
+    Deserialise pyarrow table metadata from UTF-8 JSON-encoded strings into
+    dict.
     """
     # with help from stackoverflow user 3519145 'thomas'
     metadata = table.schema.metadata
@@ -129,8 +104,12 @@ def _deserialise_metadata(table: pa.Table) -> dict:
     return deserialised_metadata
 
 
-def _deserialise_geometry(self: pd.DataFrame, geom_col_name: str) -> pd.DataFrame:
-    """Given a named column, deserialise WKB strings into shapely geometries."""
+def _deserialise_geometry(self: pd.DataFrame,
+                          geom_col_name: str
+                          ) -> pd.DataFrame:
+    """
+    Given a named column, deserialise WKB strings into shapely geometries.
+    """
     # prevent side effects
     df = self.copy()
     # deserialise WKB to shapely geometry
