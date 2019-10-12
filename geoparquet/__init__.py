@@ -25,10 +25,12 @@ import geopandas as gpd
 # ==============================================================================
 
 
-def _serialise_geometry(self: gpd.GeoDataFrame, geom_col_name: str) -> pd.DataFrame:
+def _serialise_geometry(self: gpd.GeoDataFrame, 
+                        geom_col_name: str
+                        ) -> pd.DataFrame:
     """
-    Given a geopandas GeoDataFrame, serialise the GeoSeries as well-known binary
-    and return the former geopandas GeoDataFrame as a pandas DataFrame.
+    Given a geopandas GeoDataFrame, serialise the GeoSeries as well-known 
+    binary and return the former geopandas GeoDataFrame as a pandas DataFrame.
     """
     # prevent side effects
     df = self.copy()
@@ -71,12 +73,8 @@ def to_geoparquet(self: gpd.GeoDataFrame, path: str):
     # capture geometry column name
     field_name = self.geometry.name
     # capture CRS
-    try:
-        crs = pyproj.CRS.from_dict(self.crs).to_wkt(version="WKT2_2018")
-        crs_format = "WKT2_2018"
-    except:
-        crs = self.crs
-        crs_format = "unknown"
+    crs = pyproj.CRS.from_user_input(self.crs).to_wkt(version="WKT2_2018")
+    crs_format = "WKT2_2018"
     # capture geometry types
     geometry_types = self.geometry.geom_type.unique().tolist()
     # serialise geometry
